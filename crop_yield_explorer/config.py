@@ -3,11 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-APP_TITLE = "Simple Crop Yield Data Explorer"
-APP_TAGLINE = (
-    "Explore crop and yield records, compare crops and regions, and examine "
-    "statistical relationships between agricultural variables."
-)
+APP_TITLE = "Crop Yield Explorer"
+APP_TAGLINE = "Explore agricultural data. Understand crop performance. Discover meaningful patterns."
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SAMPLE_PATH = ROOT_DIR / "data" / "sample_crop_yield.csv"
@@ -64,15 +61,21 @@ ALIASES = {
 
 # Colour palette (colour-blind-considerate categorical colours plus
 # agricultural accents for the interface).
-GREEN = "#2F6B3A"
-GREEN_DARK = "#1F4A28"
-WHEAT = "#B7862B"
+FOREST = "#163B2D"
+EVERGREEN = "#102B22"
+GREEN = "#287A52"
+GREEN_DARK = "#163B2D"
+SAGE = "#DCE9DF"
+IVORY = "#F8F7F1"
+CHARCOAL = "#202923"
+GREY = "#7C887F"
+LIME = "#B9D977"
+WHEAT = "#C99A2E"
 SOIL = "#6B4F3A"
-GREY = "#5B6670"
+# Curated categorical palette: distinguishable hues that sit well with the green brand colours.
 CATEGORICAL = [
-    "#0072B2", "#E69F00", "#009E73", "#D55E00",
-    "#CC79A7", "#56B4E9", "#7A5C2E", "#6B7280",
-    "#2F6B3A", "#8E44AD", "#B03A2E", "#1ABC9C",
+    "#287A52", "#D9A441", "#3C7DA6", "#C4623B", "#7A5C99", "#5FB3A1",
+    "#8A6F47", "#9AA64B", "#1F4E5F", "#C98BA6", "#5A6B63", "#E0C36E",
 ]
 
 

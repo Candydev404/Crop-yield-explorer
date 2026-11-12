@@ -1,4 +1,4 @@
-# Simple Crop Yield Data Explorer
+# Crop Yield Explorer
 
 **Group 65 | NS-CSC 229 Integrated Design Project II | B.Sc. Computer Science**
 
@@ -15,12 +15,15 @@ reports descriptive statistics, draws interactive charts and keeps **correlation
 
 | Area | What the application provides |
 |---|---|
-| Dashboard | Record count, total production, average yield, highest yield, number of crop types, summary statistics table and headline charts |
-| Data loading | Sample dataset, or upload of any CSV; preview, column names and data types, missing-value table, validation messages, downloadable sample file |
+| Overview | Record count, total production, average yield, highest yield, number of crop types; yield trend, production by crop, yield distribution, crop and regional comparison |
+| Explore Data | Record preview and download, column names and data types, missing-value table, descriptive statistics, grouped summaries and a single-variable explorer |
+| Crop Analysis | Crop comparison table and charts, plus a profile of one chosen crop (yield distribution against other crops, trend, regional performance) |
+| Relationships | Interactive correlation heatmap (Pearson or Spearman), ranked associations with yield, scatter explorer, and a clear correlation-versus-causation explanation |
+| Dataset Manager | Sample dataset or CSV upload with validation report, supported-format information, expected columns and a downloadable sample file |
+| About Project | Purpose, how it works, technology, data integrity notes and limitations |
 | Filters | Crop type, region, farming season, year, rainfall, temperature, fertilizer usage and land area; every page updates immediately; one-click reset |
-| Charts | Yield by crop, production distribution, rainfall / temperature / fertilizer versus yield, regional comparison, yield distribution, correlation heatmap (Pearson or Spearman); each with a title, labelled axes with units and a written interpretation |
-| Statistics | Count, missing, mean, median, minimum, maximum and standard deviation; grouped summaries; correlation with yield ranked by strength |
-| Guide | How to use the app, a correlation-versus-causation explanation, dataset notes and limitations |
+
+The interface uses a consistent design system (deep-green sidebar, ivory canvas, Manrope typeface, card layout, responsive grid for phones and tablets). The sample data are synthetic and are labelled as such in the interface.
 
 ## Project structure
 
@@ -37,7 +40,7 @@ crop-yield-explorer/
 │   ├── charts.py                Plotly charts and the Seaborn correlation heatmap
 │   ├── interpret.py             Plain-language interpretation text (association only)
 │   ├── ui.py                    Styling, session state, sidebar controls
-│   └── views/                   dashboard.py, data_page.py, charts_page.py, stats_page.py, guide_page.py
+│   └── views/                   overview.py, explore.py, crops.py, relationships.py, dataset_manager.py, about.py
 ├── data/sample_crop_yield.csv   720 synthetic records (2015-2024, 8 crops, 6 regions)
 ├── scripts/generate_sample_data.py
 ├── tests/test_core.py           Unit tests (pytest)
@@ -67,7 +70,7 @@ python -m pytest -q tests
 
 ## Using your own CSV
 
-Choose **Upload my own CSV** in the sidebar. Required columns: a crop column and a yield column
+Open **Dataset Manager** and choose **Upload my own CSV**. Required columns: a crop column and a yield column
 (or both production and land area, from which yield is calculated).
 
 | Column | Meaning | Unit |
@@ -85,7 +88,7 @@ Choose **Upload my own CSV** in the sidebar. Required columns: a crop column and
 
 Common alternative headings (for example *Crop Type*, *Location*, *Rainfall*, *Yield*) are recognised.
 Unrecognised columns are ignored. Non-numeric values, values outside plausible ranges, rows without a crop
-or yield, and duplicate rows are reported on the **Data** page. A file that cannot be used produces an
+or yield, and duplicate rows are reported on the **Dataset Manager** page. A file that cannot be used produces an
 error message and the previously loaded dataset stays active; invalid files do not crash the application.
 Maximum size: 10 MB.
 
@@ -108,7 +111,7 @@ No database, secrets, authentication or paid services are required.
 |---|---|
 | `ModuleNotFoundError` | Activate the virtual environment and run `pip install -r requirements.txt` |
 | Port already in use | `streamlit run app.py --server.port 8502` |
-| Upload rejected | Read the message on the **Data** page; check required columns and the delimiter |
+| Upload rejected | Read the message on the **Dataset Manager** page; check required columns and the delimiter |
 | Cloud build fails | Confirm `requirements.txt` is at the repository root and `app.py` is the main file |
 
 ## Responsible-use and disclosure notes
