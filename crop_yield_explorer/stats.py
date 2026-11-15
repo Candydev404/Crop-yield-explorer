@@ -119,3 +119,42 @@ def pair_correlation(df: pd.DataFrame, x: str, y: str = "yield_t_ha", method: st
     if len(pair) < 3 or pair[x].nunique() < 2 or pair[y].nunique() < 2:
         return float("nan"), len(pair)
     return float(pair[x].corr(pair[y], method=method)), len(pair)
+
+
+def extended_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Variance, quartiles, interquartile range, mode and skewness for each numeric column (year excluded)."""
+    rows = []
+    for c in config.NUMERIC_COLUMNS:
+        if c not in df.columns or c == "year":
+            continue
+        s = pd.to_numeric(df[c], errors="coerce").dropna()
+        if s.empty:
+            continue
+        q1, q2, q3 = s.quantile([0.25, 0.5, 0.75])
+        modes = s.round(2).mode()
+        rows.append({
+            "Variable": config.label(c), "Count": int(s.count()), "Variance": float(s.var(ddof=1)) if len(s) > 1 else np.nan,
+            "Q1 (25%)": float(q1), "Median (50%)": float(q2), "Q3 (75%)": float(q3), "IQR": float(q3 - q1),
+            "Mode": float(modes.iloc[0]) if len(modes) and s.round(2).value_counts().iloc[0] > 1 else np.nan,
+            "Skewness": float(s.skew()) if len(s) > 2 else np.nan,
+        })
+    return pd.DataFrame(rows)
+
+
+def frequency_table(df: pd.DataFrame, col: str, bins: int = 10) -> pd.DataFrame:
+    """Frequency distribution: category counts, or equal-width bins for a numeric column."""
+    if col not in df.columns:
+        return pd.DataFrame()
+    s = df[col].dropna()
+    if s.empty:
+        return pd.DataFrame()
+    if config.COLUMNS.get(col, {}).get("kind") == "numeric":
+        s = pd.to_numeric(s, errors="coerce").dropna()
+        cut = pd.cut(s, bins=min(bins, max(s.nunique(), 1)))
+        vc = cut.value_counts(sort=False)
+        t = pd.DataFrame({"Class": [f"{i.left:,.2f} to {i.right:,.2f}" for i in vc.index], "Records": vc.values})
+    else:
+        vc = s.value_counts()
+        t = pd.DataFrame({"Class": vc.index.astype(str), "Records": vc.values})
+    t["Share (%)"] = t["Records"] / t["Records"].sum() * 100
+    return t

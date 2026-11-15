@@ -245,3 +245,19 @@ def variable_histogram(df: pd.DataFrame, col: str) -> go.Figure:
                       annotation_text=f"Mean {s.mean():,.2f}", annotation_position="top right")
     return _style(fig, f"Distribution of {config.COLUMNS[col]['label'].lower()}", config.label(col), "Number of records",
                   height=360, legend=False)
+
+
+def scatter_xy(df: pd.DataFrame, x: str, y: str, cmap: dict) -> go.Figure:
+    """General scatter plot of two numeric (or year) columns, coloured by crop when available."""
+    cols = [c for c in {x, y, "crop"} if c in df.columns]
+    d = df[cols].copy()
+    d[x] = pd.to_numeric(d[x], errors="coerce")
+    d[y] = pd.to_numeric(d[y], errors="coerce")
+    d = d.dropna(subset=[x, y])
+    fig = go.Figure()
+    groups = d.groupby("crop") if "crop" in d.columns else [("All records", d)]
+    for name, sub in groups:
+        fig.add_trace(go.Scatter(x=sub[x], y=sub[y], mode="markers", name=str(name),
+                                 marker=dict(size=7, color=cmap.get(name, config.GREEN), opacity=0.78, line=dict(width=0.5, color="white")),
+                                 hovertemplate=f"{config.label(x)}: %{{x:,.2f}}<br>{config.label(y)}: %{{y:,.2f}}<extra>{name}</extra>"))
+    return _style(fig, f"{config.COLUMNS[y]['label']} versus {config.COLUMNS[x]['label'].lower()}", config.label(x), config.label(y), height=430)

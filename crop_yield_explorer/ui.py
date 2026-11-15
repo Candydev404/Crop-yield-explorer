@@ -8,7 +8,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from . import config, data, filters
+from . import config, data, filters, store
 
 # --------------------------------------------------------------------------
 # Design system
@@ -110,6 +110,21 @@ section[data-testid="stSidebar"] [data-baseweb="tag"] { height:24px; font-size:.
 [data-testid="stDataFrame"] { border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 [data-testid="stPlotlyChart"] { width:100%; }
 
+/* ---------- account area ---------- */
+.avatar { border-radius:50%; background:var(--green); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; object-fit:cover; flex:0 0 auto; }
+.acct { display:flex; align-items:center; gap:.7rem; }
+.acct small { color:#9DB5A6; }
+[data-testid="stPopoverBody"] .acct small { color:var(--muted); }
+.nt { font-size:.85rem; padding:.5rem .1rem; border-bottom:1px solid var(--line); line-height:1.4; }
+.nt span { font-weight:800; font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; color:var(--green); margin-right:.3rem; }
+.nt.warning span { color:var(--amber); }
+.nt small { display:block; color:var(--muted); font-size:.7rem; }
+.insight { background:#fff; border:1px solid var(--line); border-left:4px solid var(--green); border-radius:8px; padding:.8rem 1rem; margin:.55rem 0; box-shadow:var(--shadow); }
+.insight.caution { border-left-color:var(--amber); } .insight.info { border-left-color:#8AA597; }
+.insight .it { font-size:.7rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); }
+.insight .tx { font-size:.95rem; margin-top:.15rem; color:var(--ink); }
+.insight .ev { font-size:.76rem; color:var(--muted); margin-top:.25rem; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0,1fr)); } .mini-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
 @media (max-width: 768px) {
@@ -140,9 +155,11 @@ NAV = {
     "Overview": ":material/dashboard: Overview",
     "Explore Data": ":material/table_view: Explore Data",
     "Crop Analysis": ":material/eco: Crop Analysis",
-    "Relationships": ":material/scatter_plot: Relationships",
-    "Dataset Manager": ":material/upload_file: Dataset Manager",
-    "About Project": ":material/info: About Project",
+    "Correlation Insights": ":material/scatter_plot: Correlation Insights",
+    "Dataset Manager": ":material/folder_open: Dataset Manager",
+    "Smart Insights": ":material/lightbulb: Smart Insights",
+    "My Profile": ":material/person: My Profile",
+    "Settings": ":material/settings: Settings",
 }
 
 
@@ -203,7 +220,7 @@ def note(text: str, kind: str = "note") -> None:
 
 
 def interp(text: str) -> None:
-    if text:
+    if text and pref("show_interpretations"):
         h = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
         st.markdown(f'<div class="interp"><b>Reading this chart.</b> {h}</div>', unsafe_allow_html=True)
 
@@ -227,7 +244,23 @@ def card():
     return st.container(border=True, key=f"card_{st.session_state['_card_n']}")
 
 
+_DENSITY = {"Compact": 0.85, "Standard": 1.0, "Tall": 1.2}
+
+
+def ctx() -> dict:
+    """Signed-in context for the current run: user, session, backend and store."""
+    return st.session_state["_ctx"]
+
+
+def pref(name: str):
+    """A saved user preference (falls back to the default)."""
+    return st.session_state.get("prefs", store.DEFAULT_PREFS).get(name, store.DEFAULT_PREFS[name])
+
+
 def plot(fig, key: str) -> None:
+    h = fig.layout.height
+    if h:
+        fig.update_layout(height=int(h * _DENSITY.get(pref("chart_density"), 1.0)))
     st.plotly_chart(fig, width="stretch", key=key,
                     config={"displaylogo": False, "displayModeBar": "hover",
                             "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"]})
@@ -247,7 +280,7 @@ def active_filters_chips(active: list[str]) -> None:
 # --------------------------------------------------------------------------
 # State and data source
 # --------------------------------------------------------------------------
-def _set_result(res: data.LoadResult, name: str, synthetic: bool) -> None:
+def activate(res: data.LoadResult, name: str, synthetic: bool) -> None:
     st.session_state["result"] = res
     st.session_state["source_name"] = name
     st.session_state["synthetic"] = synthetic
@@ -257,12 +290,12 @@ def _set_result(res: data.LoadResult, name: str, synthetic: bool) -> None:
 
 def init_state() -> None:
     if "result" not in st.session_state:
-        _set_result(data.load_sample(), config.SAMPLE_NAME, True)
+        activate(data.load_sample(), config.SAMPLE_NAME, True)
 
 
 def _on_source_change() -> None:
     if st.session_state.get("source_choice", "").startswith("Sample"):
-        _set_result(data.load_sample(), config.SAMPLE_NAME, True)
+        activate(data.load_sample(), config.SAMPLE_NAME, True)
 
 
 def dataset_source_controls() -> None:
@@ -288,10 +321,19 @@ def dataset_source_controls() -> None:
         st.session_state["upload_sig"] = sig
         st.session_state["upload_result"] = res
         if res.ok:
-            _set_result(res, up.name, False)
+            activate(res, up.name, False)
+            notify("success", f"Uploaded {up.name}: {res.rows_kept:,} records ready.")
+            if res.warnings:
+                notify("warning", f"{len(res.warnings)} validation warning(s) for {up.name}. See Dataset Manager.")
+            miss = int(res.df.isna().sum().sum())
+            if miss:
+                notify("warning", f"Missing data detected in {up.name}: {miss:,} value(s).")
             st.rerun()  # refresh the header, sidebar filters and every page with the new dataset
     res = st.session_state["upload_result"]
     if not res.ok:
+        if st.session_state.get("_rej_sig") != sig:
+            st.session_state["_rej_sig"] = sig
+            notify("warning", f"{up.name} was rejected: {res.errors[0] if res.errors else 'invalid file'}")
         st.error("The uploaded file could not be loaded.")
         for e in res.errors:
             st.markdown(f"- {e}")
@@ -352,3 +394,71 @@ def require_records(fdf: pd.DataFrame, minimum: int = 1) -> bool:
             empty_state(f"Only {len(fdf)} record(s) match", f"At least {minimum} records are needed here. Widen the filters in the sidebar.")
         return False
     return True
+
+
+# --------------------------------------------------------------------------
+# Notifications, avatar, top bar
+# --------------------------------------------------------------------------
+def notify(kind: str, text: str) -> None:
+    """Record a real event (kind: success, warning, info). Shown in the bell menu."""
+    items = st.session_state.setdefault("notifications", [])
+    items.insert(0, {"time": datetime.now().strftime("%H:%M"), "kind": kind, "text": text, "read": False})
+    del items[30:]
+
+
+def notify_cb(text: str):
+    """Callback factory for download buttons: records the export when the user downloads."""
+    return lambda: notify("success", text)
+
+
+def initials(name: str) -> str:
+    parts = [p for p in re.split(r"\s+", (name or "").strip()) if p]
+    return ("".join(p[0] for p in parts[:2]) or "?").upper()
+
+
+def avatar_html(user, size: int = 36) -> str:
+    if getattr(user, "avatar_url", None) and str(user.avatar_url).startswith("https://"):
+        return (f'<img class="avatar" src="{esc(user.avatar_url)}" width="{size}" height="{size}" referrerpolicy="no-referrer" alt="">')
+    return f'<div class="avatar" style="width:{size}px;height:{size}px;font-size:{size * 0.4:.0f}px">{esc(initials(user.name))}</div>'
+
+
+def _go_profile() -> None:
+    st.session_state["page"] = "My Profile"
+
+
+def _mark_read() -> None:
+    for n in st.session_state.get("notifications", []):
+        n["read"] = True
+
+
+def _clear_notes() -> None:
+    st.session_state["notifications"] = []
+
+
+def topbar(user, on_signout) -> None:
+    """Right-aligned account area: notifications and account menu."""
+    notes = st.session_state.get("notifications", [])
+    unread = sum(1 for n in notes if not n["read"])
+    _, c1, c2 = st.columns([6, 1.5, 2.6], gap="small")
+    with c1.popover(f":material/notifications: {unread}" if unread else ":material/notifications:", width="stretch"):
+        st.markdown("**Notifications**")
+        if not notes:
+            st.caption("Nothing yet. Events such as uploads, warnings and exports appear here.")
+        for n in notes[:8]:
+            dot = {"success": "OK", "warning": "Check", "info": "Info"}.get(n["kind"], "Info")
+            st.markdown(f'<div class="nt {n["kind"]}"><span>{dot}</span> {esc(n["text"])}<small>{n["time"]}</small></div>', unsafe_allow_html=True)
+        if notes:
+            b1, b2 = st.columns(2)
+            b1.button("Mark as read", on_click=_mark_read, key="nt_read", width="stretch")
+            b2.button("Clear", on_click=_clear_notes, key="nt_clear", width="stretch")
+    with c2.popover(f":material/account_circle: {user.name.split()[0]}", width="stretch"):
+        st.markdown(f'<div class="acct">{avatar_html(user, 40)}<div><b>{esc(user.name)}</b><br><small>{esc(user.email)}</small></div></div>', unsafe_allow_html=True)
+        st.button("My profile", on_click=_go_profile, key="tb_prof", width="stretch")
+        st.button("Sign out", on_click=on_signout, key="tb_out", width="stretch")
+
+
+def sidebar_user(user, on_signout) -> None:
+    st.sidebar.markdown('<div class="side-label">Account</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(f'<div class="side-chip acct">{avatar_html(user, 32)}<div><b>{esc(user.name)}</b><br><small>{esc(user.email)}</small></div></div>',
+                        unsafe_allow_html=True)
+    st.sidebar.button("Sign out", on_click=on_signout, key="sb_out", width="stretch")

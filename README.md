@@ -3,6 +3,7 @@
 **Group 65 | NS-CSC 229 Integrated Design Project II | B.Sc. Computer Science**
 
 An interactive web application, built with Python and Streamlit, for exploring crop and yield records.
+It now requires a **signed-in account**: there is no guest, demo or anonymous access. Authentication is provided by **Supabase Auth**; this project does not implement its own password handling.
 It loads a bundled **synthetic** sample dataset or a CSV file supplied by the user, filters the records,
 reports descriptive statistics, draws interactive charts and keeps **correlation** clearly separate from
 **causation**.
@@ -13,15 +14,19 @@ reports descriptive statistics, draws interactive charts and keeps **correlation
 
 ## Features
 
-| Area | What the application provides |
+| Page | What it provides |
 |---|---|
-| Overview | Record count, total production, average yield, highest yield, number of crop types; yield trend, production by crop, yield distribution, crop and regional comparison |
-| Explore Data | Record preview and download, column names and data types, missing-value table, descriptive statistics, grouped summaries and a single-variable explorer |
-| Crop Analysis | Crop comparison table and charts, plus a profile of one chosen crop (yield distribution against other crops, trend, regional performance) |
-| Relationships | Interactive correlation heatmap (Pearson or Spearman), ranked associations with yield, scatter explorer, and a clear correlation-versus-causation explanation |
-| Dataset Manager | Sample dataset or CSV upload with validation report, supported-format information, expected columns and a downloadable sample file |
-| About Project | Purpose, how it works, technology, data integrity notes and limitations |
-| Filters | Crop type, region, farming season, year, rainfall, temperature, fertilizer usage and land area; every page updates immediately; one-click reset |
+| Overview | Personal welcome, KPIs (records, total production, average yield, highest yield, crop types), trend and distribution charts |
+| Explore Data | Preview, schema, missing values, descriptive and extended statistics (variance, quartiles, IQR, mode, skewness), frequency distributions, grouped summaries, and an Exports tab (filtered CSV, cleaned CSV, statistics, correlations, insights as Markdown) |
+| Crop Analysis | Crop comparison and a profile of one chosen crop |
+| Correlation Insights | Pearson or Spearman heatmap, ranked associations with yield, scatter explorer, correlation-versus-causation note |
+| Dataset Manager | Sample or CSV upload, data-quality summary, **saved datasets** (save, use, rename, remove) |
+| Smart Insights | Rule-based observations calculated from the loaded data, plus a chart advisor that recommends only charts the selected columns support |
+| My Profile | Account details, edit name, change password (email accounts), session information, sign out (this device or all devices) |
+| Settings | Four saved preferences (table preview rows, chart height, interpretation notes on/off, default correlation method) plus the About section |
+
+Header: logo, page title, notification bell (real events only: sign-in, uploads, saves, exports) and account menu.
+Sidebar filters appear only for columns that exist in the loaded dataset.
 
 The interface uses a consistent design system (deep-green sidebar, ivory canvas, Manrope typeface, card layout, responsive grid for phones and tablets). The sample data are synthetic and are labelled as such in the interface.
 
@@ -31,7 +36,9 @@ The interface uses a consistent design system (deep-green sidebar, ivory canvas,
 crop-yield-explorer/
 ├── app.py                       Streamlit entry point (navigation, data source, filters)
 ├── requirements.txt             Python dependencies
+├── supabase_schema.sql          Tables and Row Level Security policies
 ├── .streamlit/config.toml       Theme and server settings
+├── .streamlit/secrets.toml.example  Template only; the real secrets.toml is git-ignored
 ├── crop_yield_explorer/
 │   ├── config.py                Column definitions, units, bounds, aliases, colours
 │   ├── data.py                  CSV reading, validation, cleaning, schema/missing tables
@@ -39,12 +46,16 @@ crop-yield-explorer/
 │   ├── stats.py                 KPIs, descriptive statistics, correlation analysis
 │   ├── charts.py                Plotly charts and the Seaborn correlation heatmap
 │   ├── interpret.py             Plain-language interpretation text (association only)
-│   ├── ui.py                    Styling, session state, sidebar controls
-│   └── views/                   overview.py, explore.py, crops.py, relationships.py, dataset_manager.py, about.py
+│   ├── ui.py                    Styling, session state, sidebar, top bar, notifications
+│   ├── accounts.py              Supabase Auth wrapper, validation, PKCE, fail-secure session gate
+│   ├── store.py                 Saved datasets and preferences (Supabase table or session fallback)
+│   ├── insights.py              Rule-based insights (no significance claims)
+│   ├── advisor.py               Chart recommendation and builder
+│   └── views/                   login, overview, explore, crops, correlation, dataset_manager, smart, profile, settings, about
 ├── data/sample_crop_yield.csv   720 synthetic records (2015-2024, 8 crops, 6 regions)
 ├── scripts/generate_sample_data.py
-├── tests/test_core.py           Unit tests (pytest)
-└── docs/screenshots/            Screenshots captured from the running application
+├── tests/                       pytest suites; fake_backend.py is a test-only stand-in for Supabase
+└── docs/screenshots/            Screenshots (login and workspace pages use a fake sign-in backend, see README)
 ```
 
 ## Run locally
@@ -53,6 +64,7 @@ Requires Python 3.10 or newer.
 
 ```bash
 cd crop-yield-explorer
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # then fill in your Supabase values
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -92,18 +104,60 @@ or yield, and duplicate rows are reported on the **Dataset Manager** page. A fil
 error message and the previously loaded dataset stays active; invalid files do not crash the application.
 Maximum size: 10 MB.
 
+## Authentication setup (required)
+
+Without the secrets below the app shows a "Sign-in is not configured" screen and nothing else. This is deliberate.
+
+### 1. Create the Supabase project
+1. Create a free project at <https://supabase.com>.
+2. **Project Settings > API**: copy the **Project URL** and the **anon / public** key. Never use or paste the `service_role` key anywhere in this project.
+3. **SQL Editor > New query**: paste the whole of `supabase_schema.sql` and run it. This creates `datasets` and `user_settings`, enables and forces Row Level Security, and allows each signed-in user to read and write only rows where `auth.uid() = user_id`. The `anon` role is denied.
+4. **Authentication > Providers > Email**: keep *Confirm email* switched on so new users must verify their address.
+5. **Authentication > URL Configuration**: set **Site URL** to your app URL and add `https://YOUR-APP.streamlit.app/**` (and `http://localhost:8501/**` for local use) to **Redirect URLs**. The wildcard is needed because the app appends a one-time `cyx` parameter to the redirect.
+6. Optional: configure SMTP under *Authentication > SMTP* for reliable delivery; the built-in mailer is heavily rate-limited.
+
+### 2. Streamlit secrets
+Local: copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`. Streamlit Community Cloud: **App > Settings > Secrets**, paste the same content.
+
+| Key | Meaning |
+|---|---|
+| `supabase.url` | Project URL |
+| `supabase.anon_key` | Public anon key |
+| `supabase.app_url` | Exact app address, no trailing slash |
+| `supabase.google_enabled` | `true` only after Google is enabled (default `false`) |
+
+There are no other environment variables. `secrets.toml` is listed in `.gitignore`; never commit it.
+
+### 3. Google sign-in (optional)
+1. Google Cloud Console > APIs & Services > Credentials > Create **OAuth client ID** (Web application).
+2. Add the authorised redirect URI shown in Supabase under *Authentication > Providers > Google* (`https://YOUR-REF.supabase.co/auth/v1/callback`).
+3. Paste the Google client ID and secret into that Supabase provider page and enable it.
+4. Set `google_enabled = true` in the Streamlit secrets and reboot the app.
+
 ## Deploy on Streamlit Community Cloud (free)
 
-1. Create a GitHub repository and upload the contents of this folder so that `app.py`,
-   `requirements.txt` and the `crop_yield_explorer/` and `data/` folders are at the repository root.
-2. Sign in at <https://share.streamlit.io> with the GitHub account and choose **Create app**
-   (or **New app**), then select the repository.
-3. Select the branch (for example `main`) and set **Main file path** to `app.py`.
-4. Under **Advanced settings** choose Python 3.11 or newer, then press **Deploy**.
-5. The first build installs `requirements.txt`; the app is then available at a public
-   `*.streamlit.app` address that updates whenever the repository is updated.
+1. Push this folder to a GitHub repository (`app.py`, `requirements.txt`, `crop_yield_explorer/`, `data/`, `.streamlit/config.toml` at the root; **not** `secrets.toml`).
+2. At <https://share.streamlit.io> choose **Create app**, select the repository and branch, and set **Main file path** to `app.py`.
+3. Under **Advanced settings** choose Python 3.11 or newer and paste the secrets from the section above.
+4. Deploy. After the first build, create an account on the sign-in screen and verify the email.
 
-No database, secrets, authentication or paid services are required.
+## Security design
+
+* Passwords go only to Supabase Auth. They are read from `st.form` widgets that clear on submit and are never stored in session state, logs or files.
+* `app.py` calls `accounts.gate()` before any workspace code. If configuration is missing, the session is missing, expired (12 h maximum) or fails the 10-minute server-side re-verification, the script stops at the sign-in screen.
+* Only the anon key is used. Database access carries the user's own token, so Row Level Security (not application code) decides which rows are visible.
+* Google sign-in and password reset use PKCE. The code verifier stays on the server and the redirect carries a single-use nonce.
+* Uploads: only `.csv`/`.txt`, 10 MB maximum, parsed as data and never executed. Saved datasets: 5 MB and 10 per user.
+* Password-reset responses are identical whether or not the address exists.
+
+## Architecture additions after the original project
+Authentication gate, per-user storage, insights engine, chart advisor, extended statistics, exports, profile and settings pages, top bar with notifications. Calculation code (`stats.py`, `insights.py`, `advisor.py`) contains no Streamlit calls where practical and is covered by pytest.
+
+## Known limitations
+* A browser refresh ends the session (Streamlit cannot keep a secure cookie session without extra components), so there is no "remember me".
+* Without the schema, saved datasets last only for the browser session; the Dataset Manager says so.
+* Insights are descriptive rules over the loaded rows. They make no significance claims, forecasts or farm recommendations.
+* The sample dataset is synthetic.
 
 ## Troubleshooting
 
@@ -112,6 +166,8 @@ No database, secrets, authentication or paid services are required.
 | `ModuleNotFoundError` | Activate the virtual environment and run `pip install -r requirements.txt` |
 | Port already in use | `streamlit run app.py --server.port 8502` |
 | Upload rejected | Read the message on the **Dataset Manager** page; check required columns and the delimiter |
+| "Sign-in is not configured" | Add the three `supabase.*` secrets and reboot the app |
+| Google/reset link returns to a blank or error page | Add `https://YOUR-APP.streamlit.app/**` to Supabase Redirect URLs |
 | Cloud build fails | Confirm `requirements.txt` is at the repository root and `app.py` is the main file |
 
 ## Responsible-use and disclosure notes
@@ -124,4 +180,4 @@ No database, secrets, authentication or paid services are required.
 
 ## Main libraries
 
-Streamlit, pandas, NumPy, Matplotlib, Seaborn and Plotly (see `requirements.txt`).
+Streamlit, pandas, NumPy, Matplotlib, Seaborn, Plotly, supabase-py and httpx (see `requirements.txt`).
